@@ -1,17 +1,7 @@
 import urwid
 
 class VimListBox(urwid.ListBox):
-    """A ListBox subclass which provides vim-like and mouse scrolling.
-
-    Additional properties:
-    size -- a tuple (width, height) of the listbox dimensions
-    total_lines -- total number of lines
-    pos -- a string containing vim-like scroll position indicator
-
-    Additional signals:
-    changed -- emited when the listbox content changes
-    """
-    signals = ['changed']
+    """A ListBox subclass which provides vim-like and mouse scrolling."""
 
     def keypress(self, size, key):
         """Overrides ListBox.keypress method.
