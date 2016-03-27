@@ -187,6 +187,8 @@ class Player:
         Args:
             station: The station to play.
         """
+        if (station == self.station):
+            return
         self.station = station
         self.play_static()
         if self.process != None:
