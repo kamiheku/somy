@@ -3,7 +3,8 @@
 import urwid
 import configparser
 from os import mkfifo, remove
-from os.path import expanduser
+from os.path import expanduser, isfile
+from sys import exit
 from subprocess import Popen, DEVNULL
 
 """
@@ -20,14 +21,26 @@ A simple & fast internet radio player.
 
 # Where the user's files reside.
 HOME = expanduser('~')
-STATIONS_FILE = HOME + "/.somy/stations.conf"
-CONFIG_FILE = HOME + "/.somy/somy.conf"
-NOISE_FILE = HOME + "/.somy/static.wav"
+CONFIG_DIR = HOME + "/.somy"
+STATIONS_FILE = CONFIG_DIR + "/stations.conf"
+CONFIG_FILE = CONFIG_DIR + "/somy.conf"
+NOISE_FILE = CONFIG_DIR + "/static.wav"
 
 # Parse the config file.
 CONFIG = configparser.ConfigParser()
-CONFIG.read(CONFIG_FILE)
-GENRE_COLORS = CONFIG["colors"]
+if isfile(CONFIG_FILE):
+    CONFIG.read(CONFIG_FILE)
+else:
+    CONFIG['config'] = {'simple_audio_player':'aplay',
+                        'play_static' : True,
+                        'fifopath' : '/tmp/somy.fifo'}
+try:
+    GENRE_COLORS = CONFIG["colors"]
+except KeyError:
+    GENRE_COLORS = {}
+if not isfile(STATIONS_FILE):
+    print("Please create {}".format(STATIONS_FILE))
+    exit(1)
 
 # Needed for using color in urwid.
 COLORS = [('black', 'black', ''),
