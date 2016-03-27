@@ -35,5 +35,5 @@ Inspired by [soma](http://www.dawoodfall.net/slackbuilds/noversion/soma).
 The format is as follows:
 
 ```
-The name of the stations,http://the-url-of-the-stream/stream.pls,tag1;tag2;tag3
+The name of the station,http://the-url-of-the-stream/stream.pls,tag1;tag2;tag3
 ```
