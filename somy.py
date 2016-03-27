@@ -1,171 +1,298 @@
-import time
 import urwid
 import configparser
 from os import mkfifo, remove
 from os.path import expanduser
-from subprocess import Popen, DEVNULL, run
-from vlb import VimListBox
+from subprocess import Popen, DEVNULL
 
-# TODO:
-# [✓] mute / stop
-# [✓] tags (genres)
-# [✓] colors (for genres too)
-# [✓] title (now playing)
-# [✓] quit with 'q'
-# [✓] tag colors in a config file
-# [ ] cleanup
-# [ ] comments
+"""
+ .d8888.  .d88b.  .88b  d88. db    db 
+ 88'  YP .8P  Y8. 88'YbdP`88 `8b  d8' 
+ `8bo.   88    88 88  88  88  `8bd8'  
+   `Y8b. 88    88 88  88  88    88    
+ db   8D `8b  d8' 88  88  88    88    
+ `8888Y'  `Y88P'  YP  YP  YP    YP    
 
-home = expanduser('~')
-stations_file = home + "/.somy/stations.conf"
-config_file = home + "/.somy/somy.conf"
-noise_file = home + "/.somy/static.wav"
+A simple & fast internet radio player.
+         Powered by mplayer.
+"""
 
-config = configparser.ConfigParser()
-config.read(config_file)
+# Where the user's files reside.
+HOME = expanduser('~')
+STATIONS_FILE = HOME + "/.somy/stations.conf"
+CONFIG_FILE = HOME + "/.somy/somy.conf"
+NOISE_FILE = HOME + "/.somy/static.wav"
 
-genre_colors = config["colors"]
+# Parse the config file.
+CONFIG = configparser.ConfigParser()
+CONFIG.read(CONFIG_FILE)
+GENRE_COLORS = CONFIG["colors"]
 
-colors = [('black','black',''),
-          ('dark red','dark red',''),
-          ('dark green','dark green',''),
-          ('brown','brown',''),
-          ('dark blue','dark blue',''),
-          ('dark magenta','dark magenta',''),
-          ('dark cyan','dark cyan',''),
-          ('light gray','light gray',''),
-          ('dark gray','dark gray',''),
-          ('light red','light red',''),
-          ('light green','light green',''),
-          ('yellow','yellow',''),
-          ('light blue','light blue',''),
-          ('light magenta','light magenta',''),
-          ('light cyan','light cyan',''),
-          ('white','white','')]
+# Needed for using color in urwid.
+COLORS = [('black', 'black', ''),
+          ('dark red', 'dark red', ''),
+          ('dark green', 'dark green', ''),
+          ('brown', 'brown', ''),
+          ('dark blue', 'dark blue', ''),
+          ('dark magenta', 'dark magenta', ''),
+          ('dark cyan', 'dark cyan', ''),
+          ('light gray', 'light gray', ''),
+          ('dark gray', 'dark gray', ''),
+          ('light red', 'light red', ''),
+          ('light green', 'light green', ''),
+          ('yellow', 'yellow', ''),
+          ('light blue', 'light blue', ''),
+          ('light magenta', 'light magenta', ''),
+          ('light cyan', 'light cyan', ''),
+          ('white', 'white', '')]
 
-colors_reverse = {x[0]:'reversed' for x in colors}
-colors_reverse.update({None:'reversed'})
+# Needed for using 'reversed' display mode with colors.
+COLORS_REVERSE = {x[0]:'reversed' for x in COLORS}
+COLORS_REVERSE.update({None:'reversed'})
 
-def parseStations():
+def parse_stations():
     """Parses stations from the stations file.
-    
+
     Returns:
-        A list of Stations.
+        A list of stations.
     """
     stations = []
-    with open(stations_file, 'r') as f:
-        for line in f:
+    with open(STATIONS_FILE, 'r') as file:
+        for line in file:
             chaninfo = line.strip().split(',')
-            stations.append(Station(chaninfo[0], chaninfo[1], chaninfo[2]))
+            stations.append(Station(chaninfo[0], chaninfo[1], chaninfo[2].split(';')))
     return stations
 
-def colorizeTags(tags):
-    tagsplit = tags.split(";")
-    colTags = [('dark gray', '[')]
-    for i in range(len(tagsplit)):
-        # colTags.append((choice(list(x[0] for x in colors)), tagsplit[i]))
-        genre = tagsplit[i]
-        if genre in genre_colors.keys():
-            color = genre_colors[genre]
+def colorize_tags(tags):
+    """Colorizes the tags.
+
+    Given a string of form "tag1,tag2,tag3", colorizes them with urwid and
+    spits out a list of tuples. Also adds a dark gray '[' to the beginning and
+    a dark gray ']' to the end.
+
+    Args:
+        tags: A string containing tags, separated by commas.
+
+    Returns:
+        A list of tuples like this:
+
+        ("color", "tag")
+    """
+    col_tags = [('dark gray', '[')]
+    for i in range(len(tags)):
+        genre = tags[i]
+        if genre in GENRE_COLORS.keys():
+            color = GENRE_COLORS[genre]
         else:
             color = "light gray"
-        colTags.append((color, genre))
-        if i < len(tagsplit) - 1:
-            colTags.append(("white", " / "))
-    colTags.append(('dark gray', ']'))
-    return colTags
+        col_tags.append((color, genre))
+        if i < len(tags) - 1:
+            col_tags.append(("white", " / "))
+    col_tags.append(('dark gray', ']'))
+    return col_tags
+
+class VimListBox(urwid.ListBox):
+    """A ListBox subclass which provides vim-like and mouse scrolling."""
+
+    def keypress(self, size, key):
+        """Overrides ListBox.keypress method.
+
+        Implements vim-like scrolling.
+        """
+        if key == 'j':
+            self.keypress(size, 'down')
+            return True
+        if key == 'k':
+            self.keypress(size, 'up')
+            return True
+        return self.__super.keypress(size, key)
 
 class Station:
+    """A radio station.
+
+    A radio station has a name, a url for the stream, and a collection of tags.
+
+    Attributes:
+        name: A string containing the name of the station.
+        url: A string containing the url for the stream.
+        tags: A list containing the user defined tags for the station.
+    """
     def __init__(self, name, url, tags):
+        """Inits the station with the name, url and tags."""
         self.name = name
         self.url = url
         self.tags = tags
 
 class Player:
-    def __init__(self, station, config):
+    """The player.
+
+    The player is responsible for actually playing the streams. It spawns an
+    mplayer process and controls it via a FIFO.
+
+    Attributes:
+        config: A ConfigParser instance containing the user's configuration file.
+        station: The station that's currently playing.
+        process: A Popen object (the running mplayer process).
+        fifopath: A string containing the path/filename of the FIFO.
+        volume: An integer containing the current volume.
+    """
+
+    def __init__(self, config):
+        """Inits the player with the given parameters, creates the FIFO,
+        and spawns an mplayer process.
+
+        Args:
+            config: A ConfigParser instance containing the user's configuration
+            file.
+        """
         self.config = config
-        self.station = station
-        self.process = None
-        self.fifopath = "/tmp/somy.fifo"
+        self.station = None
+        self.fifopath = self.config["config"]["fifopath"]
         self.volume = 100
         mkfifo(self.fifopath)
-
-    def stop(self):
-        self.cmd("stop")
-
-    def mute(self):
-        self.cmd("mute")
-
-    def play(self, station):
-        self.station = station
-        Popen([self.config["config"]["simple_audio_player"], noise_file],
+        self.process = Popen(
+            ["mplayer",
+             "-cache",
+             "64",
+             "-softvol",
+             "-prefer-ipv4",
+             "-slave",
+             "-idle",
+             "-ao",
+             "alsa",
+             "-input",
+             "file=" + self.fifopath],
             stdin=DEVNULL,
             stdout=DEVNULL,
             stderr=DEVNULL)
+
+    def stop(self):
+        """Stops playback."""
+        self.cmd("stop")
+
+    def mute(self):
+        """Mutes the player."""
+        self.cmd("mute")
+
+    def play_static(self):
+        """Plays a short burst of static using a simple, fast audio player."""
+        Popen([self.config["config"]["simple_audio_player"], NOISE_FILE],
+              stdin=DEVNULL,
+              stdout=DEVNULL,
+              stderr=DEVNULL)
+
+    def play(self, station):
+        """Starts to play the given stream. Also plays a short burst of radio
+        static, if configured to do so.
+
+        Args:
+            station: The station to play.
+        """
+        self.station = station
+        self.play_static()
         if self.process != None:
             if self.station.url[-3:] in ("pls", "m3u"):
                 self.cmd("loadlist " + station.url)
             else:
                 self.cmd("loadfile " + station.url)
-        else:
-            self.process = Popen(
-                ["mplayer",
-                 "-cache",
-                 "64",
-                 "-softvol",
-                 "-prefer-ipv4",
-                 "-slave",
-                 "-idle",
-                 "-ao",
-                 "alsa",
-                 "-input",
-                 "file=" + self.fifopath,
-                 "-playlist" if (self.station.url[-3:] in ("pls", "m3u")) else '',
-                 self.station.url],
-                stdin=DEVNULL,
-                stdout=logfile,
-                stderr=logfile)
-        self.set_volume(self.volume)
 
     def cmd(self, command):
+        """Feeds mplayer with an arbitrary command.
+
+        Args:
+            command: A string containing the command.
+        """
         with open(self.fifopath, 'w') as fifo:
             fifo.write("{}\n".format(command))
 
     def set_volume(self, volume):
+        """Sets the volume to the specified percentage (0-100).
+
+        Args:
+            volume: An integer representing the level of volume.
+        """
         self.volume = volume
         self.cmd("set_property volume {}".format(volume))
 
 class Somy:
+    """The main class.
+
+    This class is responsible for the UI of the program.
+
+    Attributes:
+        config: A ConfigParser instance containing the user's configuration file.
+        player: The Player.
+        stations: The list of stations.
+        title: A urwid tuple specifying the appearance and content of the header.
+        header: The urwid Text object containing the title.
+        main: The UI Frame.
+    """
+
     def __init__(self, config):
+        """Inits the main class, starts the player, parses the list of stations
+        and initializes the UI.
+
+        Args:
+            config: A ConfigParser instance containing the user's configuration file.
+        """
         self.config = config
-        self.player = Player("/usr/bin/mplayer", self.config)
-        self.stations = parseStations()
+        self.player = Player(self.config)
+        self.stations = parse_stations()
         self.title = ('logo', u'somy v0.0')
         self.header = urwid.Text(self.title, 'center')
-        self.main = self.draw_menu(self.stations)
+        self.main = self.init_menu(self.stations)
 
-    def draw_menu(self, stations):
+    def init_menu(self, stations):
+        """Initializes the menu and populates the station list with the
+        stations.
+
+        Args:
+            stations: A list of stations.
+
+        Returns:
+            A urwid.Frame containing the UI.
+        """
         body = []
         for station in stations:
-            button = urwid.Button([station.name + ' '] + colorizeTags(station.tags))
-            urwid.connect_signal(button, 'click', self.item_chosen, user_args=[station, self.player])
-            body.append(urwid.AttrMap(button, None, focus_map=colors_reverse))
+            button = urwid.Button([station.name + ' '] + colorize_tags(station.tags))
+            urwid.connect_signal(
+                button,
+                'click',
+                self.item_chosen,
+                user_args=[station, self.player])
+            body.append(urwid.AttrMap(button, None, focus_map=COLORS_REVERSE))
         menu = VimListBox(urwid.SimpleFocusListWalker(body))
         top = urwid.Overlay(menu, urwid.SolidFill(u' '),
-            align='center', width=('relative', 100),
-            valign='middle', height=('relative', 100),
-            min_width=20, min_height=9)
+                            align='center', width=('relative', 100),
+                            valign='middle', height=('relative', 100),
+                            min_width=20, min_height=9)
         frame = urwid.Frame(top, self.header)
-        return (frame)
+        return frame
 
     def update_title(self, newtitle):
+        """Updates the title/header.
+
+        Args:
+            newtitle: The new title.
+        """
         self.header.set_text([self.title, " | Now Playing: " + newtitle])
 
     def item_chosen(self, station, player, button):
+        """Handler for a button press. Changes the currently playing station.
+
+        Args:
+            station: The station to tune to.
+            player: The player instance to control.
+            button: The button that called the method.
+        """
         self.update_title(station.name)
         player.play(station)
 
     def key_handler(self, key):
+        """Handler for the playback, volume etc. keys.
+
+        Args:
+            key: Which key was pressed.
+        """
         if key in ('q', 'Q'):
             self.player.stop()
             remove(self.player.fifopath)
@@ -175,20 +302,19 @@ class Somy:
             self.player.stop()
         elif key in ('m', 'M'):
             self.player.mute()
-        elif key in ('1','2','3','4','5','6','7','8','9'):
+        elif key in ('1', '2', '3', '4', '5', '6', '7', '8', '9'):
             self.player.set_volume(int(key + "0"))
         elif key == '0':
             self.player.set_volume(100)
 
 def main():
-    somy = Somy(config)
+    """The main loop."""
+    somy = Somy(CONFIG)
     urwid.MainLoop(somy.main,
                    palette=[('reversed', 'standout', ''),
                             ('station', 'light blue', ''),
-                            ('tags', 'light blue', ''),
-                            ('logo', 'dark blue', '')] + colors,
+                            ('logo', 'dark blue', '')] + COLORS,
                    unhandled_input=somy.key_handler).run()
 
 if __name__ == "__main__":
-    with open("/home/karri/somylog", 'w') as logfile:
-        main()
+    main()
