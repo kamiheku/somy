@@ -23,12 +23,12 @@ Inspired by [soma](http://www.dawoodfall.net/slackbuilds/noversion/soma).
 
 ## Usage:
 
-- up/down or j/k: move up and down on the stations list
-- Enter: play
-- Numbers (1..0): control the volume (0%..100%)
-- m: mute
-- s: stop the playback
-- q: quit
+- **up/down or j/k**: move up and down on the stations list
+- **Enter**: play
+- **Numbers (1..0)**: control the volume (0%..100%)
+- **m**: mute
+- **s**: stop the playback
+- **q**: quit
 
 ## stations.conf:
 
