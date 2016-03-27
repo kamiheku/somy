@@ -37,3 +37,5 @@ The format is as follows:
 ```
 The name of the station,http://the-url-of-the-stream/stream.pls,tag1;tag2;tag3
 ```
+
+Please note that the tags are separated by semicolons.
