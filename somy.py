@@ -1,7 +1,6 @@
 import os
 import time
 import urwid
-from random import choice
 from subprocess import Popen, DEVNULL, run
 from vlb import VimListBox
 
@@ -64,29 +63,44 @@ class Player:
     def __init__(self, station):
         self.station = station
         self.process = None
+        self.fifopath = "/tmp/somy.fifo"
+        os.mkfifo(self.fifopath)
     def stop(self):
-        if self.process != None:
-            self.process.terminate()
+        self.cmd("stop")
+    def mute(self):
+        self.cmd("mute")
     def play(self, station):
         self.station = station
-        if self.process != None:
-            self.stop()
-            Popen(["aplay", "/home/karri/radio.wav"],
-                stdin=DEVNULL,
-                stdout=DEVNULL,
-                stderr=DEVNULL)
-        self.process = Popen(
-            ["mplayer",
-             "-cache",
-             "64",
-             "-prefer-ipv4",
-             "-ao",
-             "alsa",
-             "-playlist" if (self.station.url[-3:] in ("pls", "m3u")) else '',
-             self.station.url],
+        Popen(["aplay", "/home/karri/radio.wav"],
             stdin=DEVNULL,
-            stdout=logfile,
-            stderr=logfile)
+            stdout=DEVNULL,
+            stderr=DEVNULL)
+        if self.process != None:
+            if self.station.url[-3:] in ("pls", "m3u"):
+                self.cmd("loadlist " + station.url)
+            else:
+                self.cmd("loadfile " + station.url)
+        else:
+            self.process = Popen(
+                ["mplayer",
+                 "-cache",
+                 "64",
+                 "-softvol",
+                 "-prefer-ipv4",
+                 "-slave",
+                 "-idle",
+                 "-ao",
+                 "alsa",
+                 "-input",
+                 "file=" + self.fifopath,
+                 "-playlist" if (self.station.url[-3:] in ("pls", "m3u")) else '',
+                 self.station.url],
+                stdin=DEVNULL,
+                stdout=logfile,
+                stderr=logfile)
+    def cmd(self, command):
+        with open(self.fifopath, 'w') as fifo:
+            fifo.write("{}\n".format(command))
 
 def parseStations():
     stations = []
@@ -144,10 +158,17 @@ class Somy:
     def keyHandler(self, key):
         if key in ('q', 'Q'):
             self.player.stop()
+            os.remove(self.player.fifopath)
             raise urwid.ExitMainLoop()
         elif key in ('s', 'S'):
             self.header.set_text(self.title)
             self.player.stop()
+        elif key in ('m', 'M'):
+            self.player.mute()
+        elif key in ('1','2','3','4','5','6','7','8','9'):
+            self.player.cmd("set_property volume {}0".format(key))
+        elif key == '0':
+            self.player.cmd("set_property volume 100".format(key))
 
 def main():
     somy = Somy()
