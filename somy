@@ -167,7 +167,7 @@ class Player:
         self.process = Popen(
             ["mplayer",
              "-cache",
-             "64",
+             "128",
              "-softvol",
              "-prefer-ipv4",
              "-slave",
