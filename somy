@@ -8,12 +8,12 @@ from sys import exit
 from subprocess import Popen, DEVNULL
 
 """
- .d8888.  .d88b.  .88b  d88. db    db 
- 88'  YP .8P  Y8. 88'YbdP`88 `8b  d8' 
- `8bo.   88    88 88  88  88  `8bd8'  
-   `Y8b. 88    88 88  88  88    88    
- db   8D `8b  d8' 88  88  88    88    
- `8888Y'  `Y88P'  YP  YP  YP    YP    
+ .d8888.  .d88b.  .88b  d88. db    db
+ 88'  YP .8P  Y8. 88'YbdP`88 `8b  d8'
+ `8bo.   88    88 88  88  88  `8bd8'
+   `Y8b. 88    88 88  88  88    88
+ db   8D `8b  d8' 88  88  88    88
+ `8888Y'  `Y88P'  YP  YP  YP    YP
 
 A simple & fast internet radio player.
          Powered by mplayer.
@@ -304,6 +304,12 @@ class Somy:
         self.update_title(station.name)
         player.play(station)
 
+    def kill(self):
+        """Kills the process gracefully"""
+        self.player.stop()
+        remove(self.player.fifopath)
+        raise urwid.ExitMainLoop()
+
     def key_handler(self, key):
         """Handler for the playback, volume etc. keys.
 
@@ -311,9 +317,7 @@ class Somy:
             key: Which key was pressed.
         """
         if key in ('q', 'Q'):
-            self.player.stop()
-            remove(self.player.fifopath)
-            raise urwid.ExitMainLoop()
+            self.kill()
         elif key in ('s', 'S'):
             self.header.set_text(self.title)
             self.player.stop()
