@@ -73,8 +73,8 @@ def parse_stations():
     stations = []
     with open(STATIONS_FILE, 'r') as file:
         for line in file:
-            chaninfo = line.strip().split(',')
-            stations.append(Station(chaninfo[0], chaninfo[1], chaninfo[2].split(';')))
+            statinfo = line.strip().split(',')
+            stations.append(Station(statinfo[0], statinfo[1], statinfo[2].split(';')))
     return stations
 
 def colorize_tags(tags):
