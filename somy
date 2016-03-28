@@ -183,6 +183,7 @@ class Player:
     def stop(self):
         """Stops playback."""
         self.cmd("stop")
+        self.station = None
 
     def mute(self):
         """Mutes the player."""
